@@ -4,31 +4,34 @@ import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, Pola
 import { Region } from "@/types";
 
 export default function RiskVisualizer({ region }: { region: Region }) {
+  if (!region.indicators) return null;
+  const ind = region.indicators;
+
   // Normalize data for the radar chart (0-100 scale for visual balance)
   const data = [
     {
       subject: "Rainfall Deficit",
-      A: Math.min(100, Math.max(0, region.indicators.rainfall_anomaly * -2)),
+      A: Math.min(100, Math.max(0, ind.rainfall_anomaly.value * -2)),
       fullMark: 100,
     },
     {
       subject: "Temp Heat",
-      A: Math.min(100, region.indicators.temperature_anomaly * 20),
+      A: Math.min(100, ind.temperature_anomaly.value * 20),
       fullMark: 100,
     },
     {
       subject: "Veg Stress",
-      A: region.indicators.vegetation_stress * 100,
+      A: ind.vegetation_stress.value * 100,
       fullMark: 100,
     },
     {
       subject: "Scarcity",
-      A: (1 - region.indicators.water_availability) * 100,
+      A: (1 - ind.water_availability.value) * 100,
       fullMark: 100,
     },
     {
       subject: "Population",
-      A: Math.min(100, (region.indicators.population_density / 20000) * 100),
+      A: Math.min(100, (ind.population_density.value / 20000) * 100),
       fullMark: 100,
     },
   ];

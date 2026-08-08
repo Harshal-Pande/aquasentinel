@@ -22,11 +22,11 @@ export async function POST(req: Request) {
       Equity Priority: ${riskAssessment.equityPriority}/100 (${riskAssessment.equityExplanation})
       
       Environmental Indicators:
-      - Rainfall anomaly: ${region.indicators.rainfall_anomaly}%
-      - Temperature anomaly: +${region.indicators.temperature_anomaly}C
-      - Vegetation stress: ${region.indicators.vegetation_stress} (0-1)
-      - Water availability: ${region.indicators.water_availability} (0-1)
-      - Population density: ${region.indicators.population_density} per sq km
+      - Rainfall anomaly: ${region.indicators?.rainfall_anomaly?.value}%
+      - Temperature anomaly: +${region.indicators?.temperature_anomaly?.value}C
+      - Vegetation stress: ${region.indicators?.vegetation_stress?.value} (0-1)
+      - Water availability: ${region.indicators?.water_availability?.value} (0-1)
+      - Population density: ${region.indicators?.population_density?.value} per sq km
 
       Available Interventions:
       ${JSON.stringify(ALL_INTERVENTIONS, null, 2)}

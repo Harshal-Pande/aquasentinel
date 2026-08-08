@@ -61,22 +61,33 @@ export function generateDeterministicAnalysis(region: Region): AIRecommendation 
   const primaryCauses: string[] = [];
   const recommendedInterventions: Intervention[] = [];
 
-  if (ind.rainfall_anomaly < -20) {
+  if (!ind) {
+    return {
+      situationSummary: "No environmental data available for analysis.",
+      primaryCauses: ["Missing data"],
+      affectedPopulation: region.population,
+      recommendedInterventions: [ALL_INTERVENTIONS[0]],
+      reasoning: "Fallback analysis due to missing data.",
+      confidence: "LOW"
+    };
+  }
+
+  if (ind.rainfall_anomaly.value < -20) {
     primaryCauses.push("Severe historical rainfall deficit");
     recommendedInterventions.push(ALL_INTERVENTIONS[0]); // Rainwater
   }
-  if (ind.temperature_anomaly > 2) {
+  if (ind.temperature_anomaly.value > 2) {
     primaryCauses.push("Elevated evaporation rates due to temperature anomalies");
   }
-  if (ind.water_availability < 0.4) {
+  if (ind.water_availability.value < 0.4) {
     primaryCauses.push("Critical scarcity of surface water resources");
     recommendedInterventions.push(ALL_INTERVENTIONS[2]); // Demand reduction
   }
-  if (ind.vegetation_stress > 0.6) {
+  if (ind.vegetation_stress.value > 0.6) {
     primaryCauses.push("High ecological stress limiting natural retention");
     recommendedInterventions.push(ALL_INTERVENTIONS[3]); // Wetland
   }
-  if (ind.population_density > 10000) {
+  if (ind.population_density.value > 10000) {
     primaryCauses.push("Extreme population density stressing limited infrastructure");
     recommendedInterventions.push(ALL_INTERVENTIONS[1]); // Groundwater
   }
@@ -102,7 +113,7 @@ export function generateDeterministicAnalysis(region: Region): AIRecommendation 
   return {
     situationSummary: summary,
     primaryCauses: primaryCauses.length > 0 ? primaryCauses : ["General baseline water stress"],
-    affectedPopulation: Math.round(ind.population_density * 3.5), // Arbitrary scaling for "affected" demo metric
+    affectedPopulation: Math.round(ind.population_density.value * 3.5), // Arbitrary scaling for "affected" demo metric
     recommendedInterventions: uniqueInterventions.slice(0, 3), // Max 3 recommendations
     reasoning: "Analysis generated via heuristic decision engine based on environmental anomaly data and population pressure.",
     confidence: "MEDIUM"

@@ -33,15 +33,17 @@ export function simulateInterventions(
   const actualPeopleProtected = Math.min(affectedPopulation, totalPeopleProtected);
   const afterPeopleAtRisk = Math.max(0, affectedPopulation - actualPeopleProtected);
 
+  const waterAvailability = region.indicators?.water_availability?.value || 0;
+  
   // Water availability cannot exceed 100% (1.0).
   // Assuming 1000 ML recovered roughly translates to a 0.1 increase in availability for this region's scale.
   const availabilityBoost = totalWaterRecovered / 10000;
-  const afterWaterAvailability = Math.min(1.0, region.indicators.water_availability + availabilityBoost);
+  const afterWaterAvailability = Math.min(1.0, waterAvailability + availabilityBoost);
 
   return {
     before: {
       riskScore: currentRisk.score,
-      waterAvailability: region.indicators.water_availability,
+      waterAvailability: waterAvailability,
       peopleAtRisk: affectedPopulation
     },
     after: {

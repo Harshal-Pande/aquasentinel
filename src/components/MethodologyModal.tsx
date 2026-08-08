@@ -12,15 +12,23 @@ export default function MethodologyModal({ isOpen, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
         <div className="flex justify-between items-center p-4 border-b border-slate-800">
-          <h2 className="text-lg font-bold text-slate-200">Risk & Equity Methodology</h2>
+          <h2 className="text-lg font-bold text-slate-200">Methodology & Sources</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6 text-sm text-slate-300 space-y-4">
+        <div className="p-6 text-sm text-slate-300 space-y-4 max-h-[70vh] overflow-y-auto">
           <p>
-            <strong className="text-teal-400">Prototype Disclaimer:</strong> AquaSentinel uses a transparent heuristic model designed for the OurPlanet.Rocks hackathon demonstration. Data used is a mix of realistic seeded parameters and public proxy data.
+            <strong className="text-teal-400">Prototype Disclaimer:</strong> AquaSentinel uses a transparent heuristic model designed for the OurPlanet.Rocks hackathon demonstration. Data used is a mix of real-time environmental proxies and open geocoding datasets.
           </p>
+
+          <h3 className="font-semibold text-slate-200 uppercase tracking-wide mt-4">Data Sources</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li><strong>Location & Population:</strong> Open-Meteo Geocoding API</li>
+            <li><strong>Temperature & Rainfall Anomaly:</strong> Open-Meteo Current Forecast (Proxy)</li>
+            <li><strong>Vegetation Stress:</strong> Open-Meteo Soil Moisture 0-7cm (Proxy)</li>
+            <li><strong>AI Analysis:</strong> Google Gemini 2.5 Flash / Deterministic Heuristic Engine</li>
+          </ul>
           
           <h3 className="font-semibold text-slate-200 uppercase tracking-wide mt-4">Water Risk Score Weights</h3>
           <ul className="list-disc list-inside space-y-1">
