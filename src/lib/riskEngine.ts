@@ -1,44 +1,73 @@
 import { Region, RiskAssessment } from "../types";
 
-// Transparent scoring model
-// Risk Score (0-100)
-// 0-30: LOW, 31-60: MODERATE, 61-80: HIGH, 81-100: CRITICAL
+/**
+ * Transparent Weighted Risk Scoring Model (V2)
+ * 
+ * Environmental Risk Weights (85% total):
+ * - Rainfall deficit: 25%
+ * - Temperature stress: 15%
+ * - Vegetation/ecological stress: 15%
+ * - Water availability: 30%
+ * 
+ * Human/Equity Pressure (15% total):
+ * - Population pressure: 15%
+ */
 export function calculateRisk(region: Region): RiskAssessment {
   const { indicators } = region;
   
-  // Normalizing factors to a 0-100 scale impact:
-  // Rainfall Anomaly: Negative is worse. 0 to -50% mapped to 0 to 30 points.
-  const rainfallPenalty = Math.max(0, Math.min(30, (indicators.rainfall_anomaly * -1) * 0.6));
+  // 1. Rainfall deficit (0-100 score). Anomaly is e.g. -30 for 30% below average.
+  // We cap at -50 for max penalty.
+  const rainfallPenalty = Math.max(0, Math.min(100, (indicators.rainfall_anomaly * -2)));
+  const weightedRainfall = rainfallPenalty * 0.25;
   
-  // Temperature Anomaly: Positive is worse. 0 to +5C mapped to 0 to 20 points.
-  const tempPenalty = Math.max(0, Math.min(20, indicators.temperature_anomaly * 4));
+  // 2. Temperature stress (0-100). +4C is considered max penalty.
+  const tempPenalty = Math.max(0, Math.min(100, indicators.temperature_anomaly * 25));
+  const weightedTemp = tempPenalty * 0.15;
   
-  // Vegetation Stress: 0 to 1 mapped to 0 to 20 points.
-  const vegPenalty = indicators.vegetation_stress * 20;
+  // 3. Vegetation stress (0-100 scale directly from 0-1)
+  const vegPenalty = indicators.vegetation_stress * 100;
+  const weightedVeg = vegPenalty * 0.15;
   
-  // Water Availability: 0 to 1 where 0 is worst. 1 to 0 mapped to 0 to 30 points.
-  const availabilityPenalty = (1 - indicators.water_availability) * 30;
+  // 4. Water availability (0-100). Inverted: lower availability = higher penalty.
+  const availabilityPenalty = (1 - indicators.water_availability) * 100;
+  const weightedAvailability = availabilityPenalty * 0.30;
 
-  // Base score from environmental factors
-  let score = Math.round(rainfallPenalty + tempPenalty + vegPenalty + availabilityPenalty);
+  // 5. Population pressure (0-100). Cap at 20,000 density.
+  const popPenalty = Math.min(100, (indicators.population_density / 20000) * 100);
+  const weightedPop = popPenalty * 0.15;
+
+  // Final score 0-100
+  let score = Math.round(weightedRainfall + weightedTemp + weightedVeg + weightedAvailability + weightedPop);
   score = Math.max(0, Math.min(100, score));
 
   // Determine Level
   let level: "LOW" | "MODERATE" | "HIGH" | "CRITICAL" = "LOW";
-  if (score > 80) level = "CRITICAL";
-  else if (score > 60) level = "HIGH";
-  else if (score > 30) level = "MODERATE";
+  if (score >= 80) level = "CRITICAL";
+  else if (score >= 60) level = "HIGH";
+  else if (score >= 30) level = "MODERATE";
 
-  // Equity Priority Calculation
-  // Considers population density and water stress severity
-  // A region with high population and high water risk gets the highest equity priority.
-  // Normalize population density (assuming 1000 is moderate, 10000+ is extreme)
-  const popFactor = Math.min(1, indicators.population_density / 15000); 
-  const equityPriority = Math.round((score * 0.5) + (popFactor * 50));
+  // Equity Priority Calculation (V2)
+  // Combines environmental severity (score) with population exposure (density)
+  // A region with moderate risk but extremely high population can have high equity priority.
+  // We weight the environmental risk at 40% and the human exposure vulnerability at 60%.
+  const exposureVulnerability = popPenalty; // using the 0-100 pop pressure
+  const equityPriority = Math.round((score * 0.4) + (exposureVulnerability * 0.6));
+
+  let equityExplanation = "Low intervention priority due to stable water resources and lower population exposure.";
+  if (equityPriority >= 80) {
+    equityExplanation = "CRITICAL priority: Severe environmental water stress overlaps with massive population exposure.";
+  } else if (equityPriority >= 60) {
+    equityExplanation = "HIGH priority: Significant water scarcity affecting a vulnerable, dense population.";
+  } else if (equityPriority >= 40) {
+    equityExplanation = "MODERATE priority: Growing resource strain in populated areas requiring preventative action.";
+  } else if (score > 60 && equityPriority < 60) {
+    equityExplanation = "Moderate priority: High environmental stress, but lower direct human population exposure compared to urban centers.";
+  }
 
   return {
     score,
     level,
-    equityPriority
+    equityPriority,
+    equityExplanation
   };
 }

@@ -7,6 +7,8 @@ export const ALL_INTERVENTIONS: Intervention[] = [
     id: "int-rainwater",
     name: "Rainwater Harvesting Infrastructure",
     description: "Install community-scale rainwater catchment and storage systems to buffer dry seasons.",
+    impact: "MEDIUM",
+    feasibility: "EASY",
     expectedEffects: {
       riskReduction: 15,
       waterRecovery: 240, // ML/year
@@ -17,6 +19,8 @@ export const ALL_INTERVENTIONS: Intervention[] = [
     id: "int-groundwater",
     name: "Groundwater Recharge Wells",
     description: "Construct recharge shafts to direct surface runoff into depleted aquifers.",
+    impact: "HIGH",
+    feasibility: "MODERATE",
     expectedEffects: {
       riskReduction: 20,
       waterRecovery: 450,
@@ -27,6 +31,8 @@ export const ALL_INTERVENTIONS: Intervention[] = [
     id: "int-demand",
     name: "Agricultural Demand Reduction",
     description: "Subsidize drip irrigation and drought-resistant crops to lower overall water stress.",
+    impact: "VERY HIGH",
+    feasibility: "HARD",
     expectedEffects: {
       riskReduction: 25,
       waterRecovery: 800,
@@ -37,6 +43,8 @@ export const ALL_INTERVENTIONS: Intervention[] = [
     id: "int-wetland",
     name: "Wetland & Ecosystem Restoration",
     description: "Restore local wetlands to improve natural water retention and ecosystem resilience.",
+    impact: "MEDIUM",
+    feasibility: "MODERATE",
     expectedEffects: {
       riskReduction: 10,
       waterRecovery: 120,

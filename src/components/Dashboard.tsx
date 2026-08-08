@@ -3,18 +3,19 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { mockRegions } from "@/data/mockData";
-import { Region } from "@/types";
-import { Activity, Droplets, MapPin, Users, AlertTriangle, ShieldAlert, Sparkles, TrendingDown, ArrowRight } from "lucide-react";
+import { Region, AIRecommendation, SimulationResult } from "@/types";
+import { Droplets, MapPin, ShieldAlert, Sparkles, TrendingDown, ArrowRight, Info, Database } from "lucide-react";
 import { calculateRisk } from "@/lib/riskEngine";
-import { generateDeterministicAnalysis } from "@/lib/aiFallback";
+import { simulateInterventions } from "@/lib/simulationEngine";
 import RiskVisualizer from "./RiskVisualizer";
+import InterventionComparison from "./InterventionComparison";
+import MethodologyModal from "./MethodologyModal";
 
-// Dynamically import the map component since Leaflet requires window
 const MapComponent = dynamic(() => import("./Map"), {
   ssr: false,
   loading: () => (
     <div className="h-[400px] w-full bg-slate-800 rounded-xl flex items-center justify-center text-slate-400">
-      Loading map...
+      Loading global intelligence map...
     </div>
   ),
 });
@@ -22,19 +23,43 @@ const MapComponent = dynamic(() => import("./Map"), {
 export default function Dashboard() {
   const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
   const [selectedInterventions, setSelectedInterventions] = useState<Set<string>>(new Set());
+  
   const [isSimulating, setIsSimulating] = useState(false);
-  const [simulationResult, setSimulationResult] = useState<any>(null);
+  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null);
+  
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<AIRecommendation | null>(null);
+  
+  const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
 
-  // Default selection for demo purposes
-  useEffect(() => {
-    handleRegionSelect(mockRegions[0]);
-  }, []);
-
-  const handleRegionSelect = (region: Region) => {
+  const handleRegionSelect = async (region: Region) => {
     setSelectedRegion(region);
     setSelectedInterventions(new Set());
     setSimulationResult(null);
+    setAnalysis(null);
+    setIsAnalyzing(true);
+
+    const riskAssessment = calculateRisk(region);
+
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ region, riskAssessment })
+      });
+      const data = await res.json();
+      setAnalysis(data);
+    } catch (e) {
+      console.error("Analysis failed", e);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
+
+  // Auto-select first region on mount
+  useEffect(() => {
+    handleRegionSelect(mockRegions[0]);
+  }, []);
 
   const toggleIntervention = (id: string) => {
     const next = new Set(selectedInterventions);
@@ -43,51 +68,34 @@ export default function Dashboard() {
     setSelectedInterventions(next);
   };
 
-  const riskAssessment = selectedRegion ? calculateRisk(selectedRegion) : null;
-  const analysis = selectedRegion ? generateDeterministicAnalysis(selectedRegion) : null;
-
   const handleSimulate = () => {
-    if (!selectedRegion || !analysis || !riskAssessment) return;
+    if (!selectedRegion || !analysis) return;
     setIsSimulating(true);
     
     setTimeout(() => {
-      let totalRiskRed = 0;
-      let totalWaterRec = 0;
-      let totalPeopleProt = 0;
-
-      analysis.recommendedInterventions.forEach(int => {
-        if (selectedInterventions.has(int.id)) {
-          totalRiskRed += int.expectedEffects.riskReduction;
-          totalWaterRec += int.expectedEffects.waterRecovery;
-          totalPeopleProt += int.expectedEffects.peopleProtected;
-        }
-      });
-
-      setSimulationResult({
-        before: {
-          riskScore: riskAssessment.score,
-          waterAvailability: selectedRegion.indicators.water_availability,
-          peopleAtRisk: analysis.affectedPopulation
-        },
-        after: {
-          riskScore: Math.max(0, riskAssessment.score - totalRiskRed),
-          waterAvailability: Math.min(1, selectedRegion.indicators.water_availability + (totalWaterRec / 10000)), // rough heuristic
-          peopleAtRisk: Math.max(0, analysis.affectedPopulation - totalPeopleProt)
-        },
-        delta: {
-          riskReduction: totalRiskRed,
-          waterRecovered: totalWaterRec,
-          peopleProtected: totalPeopleProt
-        }
-      });
+      const activeInterventions = analysis.recommendedInterventions.filter(i => selectedInterventions.has(i.id));
+      const risk = calculateRisk(selectedRegion);
+      
+      const result = simulateInterventions(
+        selectedRegion, 
+        risk, 
+        analysis.affectedPopulation, 
+        activeInterventions
+      );
+      
+      setSimulationResult(result);
       setIsSimulating(false);
-    }, 800); // Fake delay for UX
+    }, 1200); // 1.2s delay for UX drama
   };
+
+  const riskAssessment = selectedRegion ? calculateRisk(selectedRegion) : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 font-sans selection:bg-teal-500/30">
+      <MethodologyModal isOpen={isMethodologyOpen} onClose={() => setIsMethodologyOpen(false)} />
+
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Droplets className="w-6 h-6 text-teal-400" />
@@ -97,8 +105,14 @@ export default function Dashboard() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <div className="text-xs font-medium px-2.5 py-1 bg-teal-500/10 text-teal-400 rounded-full border border-teal-500/20">
-              Prototype Mode
+            <button 
+              onClick={() => setIsMethodologyOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full transition-colors border border-slate-700"
+            >
+              <Info className="w-3.5 h-3.5" /> Methodology
+            </button>
+            <div className="text-xs font-medium px-3 py-1.5 bg-teal-500/10 text-teal-400 rounded-full border border-teal-500/20 flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" /> Prototype Data
             </div>
           </div>
         </div>
@@ -108,13 +122,15 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Left Column: Map & Regions */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
+        <div className="lg:col-span-7 flex flex-col gap-6">
           <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-            <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-teal-400" />
-              Global Risk Map
-            </h2>
-            <div className="rounded-xl overflow-hidden border border-slate-800 h-[500px]">
+            <div className="flex justify-between items-center mb-4 px-2">
+              <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-teal-400" />
+                Step 1: Identify At-Risk Region
+              </h2>
+            </div>
+            <div className="rounded-xl overflow-hidden border border-slate-800 h-[600px] relative">
               <MapComponent 
                 regions={mockRegions} 
                 selectedRegion={selectedRegion} 
@@ -125,209 +141,169 @@ export default function Dashboard() {
         </div>
 
         {/* Right Column: Dashboard Panel */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          {selectedRegion ? (
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          {selectedRegion && riskAssessment ? (
             <>
               {/* Region Overview Card */}
-              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden animate-in fade-in slide-in-from-right-4">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-teal-500 to-blue-500"></div>
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h2 className="text-2xl font-bold mb-1">{selectedRegion.name}</h2>
-                    <p className="text-slate-400 text-sm">Selected Region Analysis</p>
+                    <p className="text-slate-400 text-sm">Step 2: Explain Risk Factors</p>
                   </div>
-                  {riskAssessment && (
-                    <div className={`px-4 py-2 rounded-lg font-bold text-sm tracking-wide border 
-                      ${riskAssessment.level === 'CRITICAL' ? 'bg-red-400/10 text-red-400 border-red-400/20' : ''}
-                      ${riskAssessment.level === 'HIGH' ? 'bg-orange-400/10 text-orange-400 border-orange-400/20' : ''}
-                      ${riskAssessment.level === 'MODERATE' ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20' : ''}
-                      ${riskAssessment.level === 'LOW' ? 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20' : ''}
-                    `}>
-                      {riskAssessment.level} RISK
-                    </div>
-                  )}
+                  <div className={`px-4 py-2 rounded-lg font-bold text-sm tracking-wide border 
+                    ${riskAssessment.level === 'CRITICAL' ? 'bg-red-500/10 text-red-400 border-red-500/20' : ''}
+                    ${riskAssessment.level === 'HIGH' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : ''}
+                    ${riskAssessment.level === 'MODERATE' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : ''}
+                    ${riskAssessment.level === 'LOW' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
+                  `}>
+                    {riskAssessment.level} RISK
+                  </div>
                 </div>
 
-                {riskAssessment && (
-                  <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
-                      <p className="text-sm text-slate-400 mb-1">Water Risk Score</p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-4xl font-bold tracking-tighter">{riskAssessment.score}</span>
-                        <span className="text-slate-500 text-sm">/ 100</span>
-                      </div>
-                    </div>
-                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col items-center justify-center relative overflow-hidden">
-                      <div className="absolute inset-0 bg-indigo-500/5"></div>
-                      <p className="text-sm text-indigo-300 mb-1 flex items-center gap-1">
-                        <ShieldAlert className="w-3 h-3" /> Equity Priority
-                      </p>
-                      <div className="flex items-baseline gap-1 relative z-10">
-                        <span className="text-4xl font-bold text-indigo-400 tracking-tighter">{riskAssessment.equityPriority}</span>
-                        <span className="text-slate-500 text-sm">/ 100</span>
-                      </div>
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
+                    <p className="text-xs text-slate-400 mb-1">Water Risk Score</p>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-bold tracking-tighter">{riskAssessment.score}</span>
+                      <span className="text-slate-600 text-sm">/ 100</span>
                     </div>
                   </div>
-                )}
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col items-center justify-center relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-indigo-500/5 group-hover:bg-indigo-500/10 transition-colors"></div>
+                    <p className="text-xs text-indigo-300 mb-1 flex items-center gap-1">
+                      <ShieldAlert className="w-3 h-3" /> Equity Priority
+                    </p>
+                    <div className="flex items-baseline gap-1 relative z-10">
+                      <span className="text-4xl font-bold text-indigo-400 tracking-tighter">{riskAssessment.equityPriority}</span>
+                      <span className="text-slate-600 text-sm">/ 100</span>
+                    </div>
+                  </div>
+                </div>
 
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-blue-400" />
+                <div className="mb-6 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-sm text-indigo-200">
+                  <strong className="block mb-1 text-indigo-300">Step 3: Prioritize Intervention</strong>
+                  {riskAssessment.equityExplanation}
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
                     Risk Factor Breakdown
                   </h3>
                   <div className="bg-slate-950 rounded-xl border border-slate-800 p-2">
                     <RiskVisualizer region={selectedRegion} />
                   </div>
                 </div>
-
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-blue-400" />
-                    Key Indicators
-                  </h3>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                      <p className="text-xs text-slate-500 mb-1">Rainfall Anomaly</p>
-                      <p className="font-medium text-red-400">{selectedRegion.indicators.rainfall_anomaly}%</p>
-                    </div>
-                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                      <p className="text-xs text-slate-500 mb-1">Temp Anomaly</p>
-                      <p className="font-medium text-orange-400">+{selectedRegion.indicators.temperature_anomaly}°C</p>
-                    </div>
-                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                      <p className="text-xs text-slate-500 mb-1">Water Availability</p>
-                      <p className="font-medium text-blue-400">{Math.round(selectedRegion.indicators.water_availability * 100)}%</p>
-                    </div>
-                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                      <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                        <Users className="w-3 h-3" /> Population
-                      </p>
-                      <p className="font-medium">{selectedRegion.indicators.population_density.toLocaleString()} /km²</p>
-                    </div>
-                  </div>
-                </div>
               </section>
 
               {/* AI Analysis Section */}
-              {analysis && (
-                <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
-                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-400" />
-                    AI Intelligence Report
-                  </h3>
-                  
-                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6">
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                      {analysis.situationSummary}
-                    </p>
-                    <div className="mt-4 pt-4 border-t border-slate-800">
-                      <p className="text-xs text-slate-500 mb-2">Primary Causes:</p>
-                      <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
-                        {analysis.primaryCauses.map((cause, i) => (
-                          <li key={i}>{cause}</li>
-                        ))}
-                      </ul>
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden animate-in fade-in slide-in-from-right-8">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  AI Intelligence Report
+                </h3>
+                
+                {isAnalyzing ? (
+                  <div className="py-12 flex flex-col items-center justify-center space-y-4">
+                    <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+                    <p className="text-sm text-slate-400 animate-pulse">Generating AI insights...</p>
+                  </div>
+                ) : analysis ? (
+                  <>
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6">
+                      <p className="text-sm text-slate-300 leading-relaxed">
+                        {analysis.situationSummary}
+                      </p>
+                      <div className="mt-4 pt-4 border-t border-slate-800">
+                        <p className="text-xs text-slate-500 mb-2">Primary Causes:</p>
+                        <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
+                          {analysis.primaryCauses.map((cause, i) => (
+                            <li key={i}>{cause}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
-                  </div>
 
-                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <TrendingDown className="w-4 h-4 text-emerald-400" />
-                    Recommended Interventions
-                  </h3>
+                    <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <TrendingDown className="w-4 h-4 text-emerald-400" />
+                      Step 4: Simulate Solutions
+                    </h3>
 
-                  <div className="space-y-3 mb-6">
-                    {analysis.recommendedInterventions.map((intervention) => {
-                      const isSelected = selectedInterventions.has(intervention.id);
-                      return (
-                        <div 
-                          key={intervention.id}
-                          onClick={() => toggleIntervention(intervention.id)}
-                          className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                            isSelected 
-                              ? 'bg-teal-500/10 border-teal-500/50 ring-1 ring-teal-500/50' 
-                              : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <h4 className="font-semibold text-sm text-slate-200">{intervention.name}</h4>
-                              <p className="text-xs text-slate-400 mt-1">{intervention.description}</p>
+                    <div className="mb-6">
+                      <InterventionComparison 
+                        interventions={analysis.recommendedInterventions}
+                        selectedInterventions={selectedInterventions}
+                        onToggle={toggleIntervention}
+                      />
+                    </div>
+
+                    {!simulationResult ? (
+                      <button 
+                        onClick={handleSimulate}
+                        disabled={selectedInterventions.size === 0 || isSimulating}
+                        className="w-full py-4 px-4 bg-teal-500 hover:bg-teal-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-bold rounded-xl transition-all shadow-lg hover:shadow-teal-500/20 flex items-center justify-center gap-2"
+                      >
+                        {isSimulating ? 'Simulating Impact...' : 'Simulate Intervention Impact'}
+                        {!isSimulating && <ArrowRight className="w-5 h-5" />}
+                      </button>
+                    ) : (
+                      <div className="animate-in fade-in slide-in-from-bottom-4">
+                        <div className="bg-slate-950 border-2 border-teal-500/30 rounded-2xl p-1 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-2">
+                            <button 
+                              onClick={() => setSimulationResult(null)}
+                              className="text-xs text-slate-400 hover:text-white bg-slate-900 px-2 py-1 rounded"
+                            >
+                              Reset
+                            </button>
+                          </div>
+                          
+                          <div className="p-4 bg-slate-900/50 rounded-xl mb-1">
+                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3 text-center">Projected State</h4>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div>
+                                <p className="text-[10px] text-slate-500 uppercase">Risk Score</p>
+                                <p className="text-xl font-bold text-white">{simulationResult.after.riskScore}</p>
+                                <p className="text-xs text-emerald-400 font-medium mt-1">-{simulationResult.delta.riskReduction}</p>
+                              </div>
+                              <div className="border-x border-slate-800">
+                                <p className="text-[10px] text-slate-500 uppercase">Availability</p>
+                                <p className="text-xl font-bold text-white">{Math.round(simulationResult.after.waterAvailability * 100)}%</p>
+                                <p className="text-xs text-blue-400 font-medium mt-1">+{simulationResult.delta.waterRecovered} ML</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-slate-500 uppercase">At Risk</p>
+                                <p className="text-xl font-bold text-white">{simulationResult.after.peopleAtRisk.toLocaleString()}</p>
+                                <p className="text-xs text-purple-400 font-medium mt-1">-{simulationResult.delta.peopleProtected.toLocaleString()}</p>
+                              </div>
                             </div>
-                            <div className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 ml-4 ${
-                              isSelected ? 'bg-teal-500 border-teal-500 text-white' : 'border-slate-600'
-                            }`}>
-                              {isSelected && (
-                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              )}
-                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <button 
-                    onClick={handleSimulate}
-                    disabled={selectedInterventions.size === 0 || isSimulating}
-                    className="w-full py-3 px-4 bg-teal-500 hover:bg-teal-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
-                  >
-                    {isSimulating ? 'Simulating Impact...' : 'Simulate Intervention'}
-                    {!isSimulating && <ArrowRight className="w-4 h-4" />}
-                  </button>
-
-                  {/* Simulation Result */}
-                  {simulationResult && (
-                    <div className="mt-6 pt-6 border-t border-slate-800 animate-in fade-in slide-in-from-bottom-4">
-                      <h3 className="text-lg font-bold mb-4 text-slate-200">Projected Impact</h3>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-slate-950 p-4 rounded-xl border border-emerald-500/20">
-                          <p className="text-xs text-slate-500 mb-1">Risk Reduction</p>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-bold text-emerald-400">-{simulationResult.delta.riskReduction}</span>
-                            <span className="text-xs text-slate-500">pts</span>
-                          </div>
-                          <p className="text-xs text-slate-600 mt-1">
-                            New Score: <strong className="text-slate-300">{simulationResult.after.riskScore}</strong>
-                          </p>
-                        </div>
-                        
-                        <div className="bg-slate-950 p-4 rounded-xl border border-blue-500/20">
-                          <p className="text-xs text-slate-500 mb-1">Water Recovered</p>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-bold text-blue-400">+{simulationResult.delta.waterRecovered}</span>
-                            <span className="text-xs text-slate-500">ML/yr</span>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-950 p-4 rounded-xl border border-purple-500/20 col-span-2">
-                          <p className="text-xs text-slate-500 mb-1">People Protected</p>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-bold text-purple-400">+{simulationResult.delta.peopleProtected.toLocaleString()}</span>
-                            <span className="text-xs text-slate-500">individuals</span>
-                          </div>
-                          <div className="w-full bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
-                            <div 
-                              className="bg-purple-500 h-full rounded-full transition-all duration-1000" 
-                              style={{ width: `${Math.min(100, (simulationResult.delta.peopleProtected / simulationResult.before.peopleAtRisk) * 100)}%` }}
-                            />
+                          
+                          <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl flex items-center justify-center text-sm text-emerald-300">
+                            <strong>Success:</strong>&nbsp;{simulationResult.delta.peopleProtected.toLocaleString()} people secured.
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </section>
-              )}
+                    )}
+                  </>
+                ) : (
+                  <div className="py-8 text-center text-slate-500 text-sm">
+                    No intelligence report available.
+                  </div>
+                )}
+              </section>
             </>
           ) : (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl flex flex-col items-center justify-center text-center h-full min-h-[400px]">
-              <MapPin className="w-12 h-12 text-slate-700 mb-4" />
-              <h3 className="text-lg font-medium text-slate-300">No Region Selected</h3>
-              <p className="text-sm text-slate-500 mt-2">Click on a marker on the map to view the water risk analysis.</p>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl flex flex-col items-center justify-center text-center h-[500px]">
+              <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                <MapPin className="w-8 h-8 text-slate-600" />
+              </div>
+              <h3 className="text-xl font-medium text-slate-300">Awaiting Region Selection</h3>
+              <p className="text-sm text-slate-500 mt-2 max-w-xs leading-relaxed">
+                Select a region on the global risk map to begin the analysis and simulation workflow.
+              </p>
             </div>
           )}
         </div>

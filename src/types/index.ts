@@ -17,12 +17,15 @@ export interface RiskAssessment {
   score: number; // 0 to 100
   level: "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
   equityPriority: number; // 0 to 100
+  equityExplanation: string;
 }
 
 export interface Intervention {
   id: string;
   name: string;
   description: string;
+  impact: "LOW" | "MEDIUM" | "HIGH" | "VERY HIGH";
+  feasibility: "EASY" | "MODERATE" | "HARD";
   expectedEffects: {
     riskReduction: number;
     waterRecovery: number; // in Millions of Liters per year
