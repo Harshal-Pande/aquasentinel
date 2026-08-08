@@ -8,11 +8,11 @@ export interface ProvenanceMetric {
 }
 
 export interface EnvironmentalIndicators {
-  rainfall_anomaly: ProvenanceMetric; // e.g. -30 for 30% below average
-  temperature_anomaly: ProvenanceMetric; // e.g. +2.4 celsius
-  vegetation_stress: ProvenanceMetric; // 0 to 1 scale
-  water_availability: ProvenanceMetric; // 0 to 1 scale
-  population_density: ProvenanceMetric; // people per sq km
+  rainfall_anomaly: ProvenanceMetric; 
+  temperature_anomaly: ProvenanceMetric; 
+  vegetation_stress: ProvenanceMetric; 
+  water_availability: ProvenanceMetric; 
+  population_density: ProvenanceMetric; 
 }
 
 export interface SearchResult {
@@ -25,12 +25,19 @@ export interface SearchResult {
   population: number;
 }
 
-export interface Region {
+export interface LocationTarget {
   id: string;
   name: string;
-  coordinates: [number, number]; // [latitude, longitude]
+  country?: string;
+  admin1?: string;
+  latitude: number;
+  longitude: number;
   population: number;
-  indicators?: EnvironmentalIndicators; // Optional because we load it progressively
+  selectionMethod: "search" | "map-click";
+}
+
+export interface Region extends LocationTarget {
+  indicators?: EnvironmentalIndicators;
 }
 
 export interface RiskAssessment {
@@ -38,6 +45,13 @@ export interface RiskAssessment {
   level: "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
   equityPriority: number; // 0 to 100
   equityExplanation: string;
+  factors?: {
+    precipitationStress: number;
+    heatStress: number;
+    vegetationStress: number;
+    waterAvailabilityStress: number;
+    populationExposure: number;
+  };
 }
 
 export interface Intervention {
@@ -72,10 +86,12 @@ export interface SimulationResult {
 }
 
 export interface AIRecommendation {
-  situationSummary: string;
+  summary: string;
   primaryCauses: string[];
   affectedPopulation: number;
   recommendedInterventions: Intervention[];
-  reasoning: string;
-  confidence: "LOW" | "MEDIUM" | "HIGH";
+  equityExplanation: string;
+  uncertainties: string[];
+  dataCoverage: "HIGH" | "MEDIUM" | "LIMITED";
+  isFallback: boolean;
 }

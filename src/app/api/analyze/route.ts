@@ -1,79 +1,132 @@
 import { NextResponse } from "next/server";
-import { ALL_INTERVENTIONS, generateDeterministicAnalysis } from "@/lib/aiFallback";
+import { generateDeterministicAnalysis } from "@/lib/aiFallback";
+import { getCachedData, setCachedData } from "@/lib/cache/supabaseCache";
 
-export async function POST(req: Request) {
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Very basic hash function for the cache key to avoid hitting AI multiple times for the exact same inputs
+function hashString(str: string) {
+  let hash = 0;
+  for (let i = 0, len = str.length; i < len; i++) {
+    let chr = str.charCodeAt(i);
+    hash = (hash << 5) - hash + chr;
+    hash |= 0;
+  }
+  return hash.toString();
+}
+
+export async function POST(request: Request) {
   try {
-    const { region, riskAssessment } = await req.json();
+    const { region, riskAssessment } = await request.json();
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    
-    // If no API key, fall back to deterministic logic
-    if (!apiKey) {
-      console.log("No Gemini API key found, falling back to deterministic analysis.");
-      return NextResponse.json(generateDeterministicAnalysis(region));
+    if (!region || !riskAssessment) {
+      return NextResponse.json({ error: "Missing required data" }, { status: 400 });
+    }
+
+    const payloadString = JSON.stringify({ r: region.indicators, risk: riskAssessment.score });
+    const cacheKey = `ai:${region.id}:${hashString(payloadString)}`;
+
+    const { data: cached, stale } = await getCachedData<any>('analysis_cache', cacheKey);
+    if (cached && !stale) {
+      return NextResponse.json(cached);
+    }
+
+    if (!GEMINI_API_KEY) {
+      console.log("No Gemini API key found, using deterministic fallback.");
+      const fallback = generateDeterministicAnalysis(region);
+      await setCachedData('analysis_cache', cacheKey, fallback);
+      return NextResponse.json(fallback);
     }
 
     const prompt = `
-      You are an expert environmental AI agent for AquaSentinel.
-      Analyze this region's water risk and provide a JSON response.
+      You are AquaSentinel's Environmental Intelligence AI.
+      Analyze this location's data and output strict JSON. Do NOT invent data.
       
-      Region: ${region.name}
-      Water Risk Score: ${riskAssessment.score}/100 (Level: ${riskAssessment.level})
+      Location: ${region.name || "Unknown Coordinates"}
+      Population: ${region.population}
+      Risk Score: ${riskAssessment.score}/100 (${riskAssessment.level})
       Equity Priority: ${riskAssessment.equityPriority}/100 (${riskAssessment.equityExplanation})
       
       Environmental Indicators:
       - Rainfall anomaly: ${region.indicators?.rainfall_anomaly?.value}%
       - Temperature anomaly: +${region.indicators?.temperature_anomaly?.value}C
       - Vegetation stress: ${region.indicators?.vegetation_stress?.value} (0-1)
-      - Water availability: ${region.indicators?.water_availability?.value} (0-1)
-      - Population density: ${region.indicators?.population_density?.value} per sq km
-
-      Available Interventions:
-      ${JSON.stringify(ALL_INTERVENTIONS, null, 2)}
-
-      Task: Return a JSON object exactly matching this schema:
-      {
-        "situationSummary": "A 2-3 sentence professional summary of the water crisis.",
-        "primaryCauses": ["Cause 1", "Cause 2"],
-        "affectedPopulation": number (estimate based on density and crisis level),
-        "recommendedInterventions": [/* Include 2 to 3 full intervention objects from the available list that best solve the causes */],
-        "reasoning": "Brief explanation of why these interventions were chosen.",
-        "confidence": "HIGH" | "MEDIUM" | "LOW"
-      }
+      - Water availability proxy: ${region.indicators?.water_availability?.value} (0-1)
       
-      Do not include any markdown formatting, only pure JSON.
+      Respond strictly in this JSON format:
+      {
+        "summary": "Brief 2-sentence summary of the environmental situation.",
+        "primaryCauses": ["Cause 1", "Cause 2"],
+        "recommendedInterventions": [
+          {
+            "name": "Intervention Name (e.g. Rainwater Harvesting)",
+            "reason": "Brief reason why it works here",
+            "expectedImpact": "LOW" | "MEDIUM" | "HIGH",
+            "feasibility": "LOW" | "MEDIUM" | "HIGH"
+          }
+        ],
+        "equityExplanation": "1-sentence explanation of equity priority.",
+        "uncertainties": ["Uncertainty 1"],
+        "dataCoverage": "HIGH" | "MEDIUM" | "LIMITED",
+        "isFallback": false
+      }
     `;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-            temperature: 0.2,
-            responseMimeType: "application/json",
+          temperature: 0.2,
+          responseMimeType: "application/json"
         }
-      }),
+      })
     });
 
-    if (!response.ok) {
-      console.error("Gemini API error", await response.text());
-      return NextResponse.json(generateDeterministicAnalysis(region));
+    if (!res.ok) {
+      console.error("Gemini API error", await res.text());
+      const fallback = generateDeterministicAnalysis(region);
+      await setCachedData('analysis_cache', cacheKey, fallback);
+      return NextResponse.json(fallback);
     }
 
-    const data = await response.json();
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const aiResponse = await res.json();
+    const text = aiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
     
-    if (!content) {
-      return NextResponse.json(generateDeterministicAnalysis(region));
+    if (text) {
+      const parsed = JSON.parse(text);
+      // Ensure the correct types for UI
+      const result = {
+        summary: parsed.summary || "Analysis completed.",
+        primaryCauses: parsed.primaryCauses || [],
+        affectedPopulation: region.population || 50000,
+        recommendedInterventions: parsed.recommendedInterventions?.map((i: any, idx: number) => ({
+          id: `ai-int-${idx}`,
+          name: i.name,
+          description: i.reason,
+          impact: i.expectedImpact || "MEDIUM",
+          feasibility: i.feasibility || "MODERATE",
+          expectedEffects: {
+            riskReduction: 15, // Using fixed proxy values for simulator math
+            waterRecovery: 300,
+            peopleProtected: Math.round((region.population || 50000) * 0.1)
+          }
+        })) || [],
+        equityExplanation: parsed.equityExplanation || riskAssessment.equityExplanation,
+        uncertainties: parsed.uncertainties || [],
+        dataCoverage: parsed.dataCoverage || "MEDIUM",
+        isFallback: false
+      };
+      
+      await setCachedData('analysis_cache', cacheKey, result);
+      return NextResponse.json(result);
     }
 
-    const parsed = JSON.parse(content);
-    return NextResponse.json(parsed);
-
-  } catch (error) {
-    console.error("Analysis API failed:", error);
-    // Always fall back on error
-    return NextResponse.json({ error: "Analysis failed", fallback: true }, { status: 500 });
+    throw new Error("Failed to parse Gemini response");
+  } catch (error: any) {
+    console.error("AI Route error:", error);
+    // Since region might not be defined if the error happens during JSON parsing, we need a safe fallback
+    return NextResponse.json({ error: "Analysis failed" }, { status: 500 });
   }
 }

@@ -1,75 +1,84 @@
 import { NextResponse } from "next/server";
 import { EnvironmentalIndicators } from "@/types";
+import { getCachedData, setCachedData, normalizeCoordinates } from "@/lib/cache/supabaseCache";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const lat = searchParams.get("lat");
-  const lon = searchParams.get("lon");
+  const latStr = searchParams.get("lat");
+  const lonStr = searchParams.get("lon");
   const popStr = searchParams.get("pop");
 
-  if (!lat || !lon) {
+  if (!latStr || !lonStr) {
     return NextResponse.json({ error: "Missing coordinates" }, { status: 400 });
   }
 
+  const lat = parseFloat(latStr);
+  const lon = parseFloat(lonStr);
   const population = popStr ? parseInt(popStr) : 50000;
+  const cacheKey = `env:${normalizeCoordinates(lat, lon)}`;
 
   try {
-    // Open-Meteo Weather API (using current data as proxies for our environmental indicators)
-    // We cache this for 24 hours (86400 seconds)
-    const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,precipitation,soil_moisture_0_to_7cm&timezone=auto`,
-      { next: { revalidate: 86400 } }
-    );
-
-    if (!res.ok) {
-      throw new Error(`Weather API responded with status: ${res.status}`);
+    const { data: cached, stale } = await getCachedData<EnvironmentalIndicators>('environmental_cache', cacheKey);
+    if (cached && !stale) {
+      return NextResponse.json(cached);
     }
 
+    // Fetch current + 30 days past for baseline calculation
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,precipitation,soil_moisture_0_to_7cm&daily=temperature_2m_max,precipitation_sum&past_days=30&timezone=auto`
+    );
+
+    if (!res.ok) throw new Error("Environmental API failed");
     const data = await res.json();
     const current = data.current || {};
+    const daily = data.daily || {};
     const timestamp = new Date().toISOString();
 
-    // Data Normalization & Proxy logic
+    // Calculate Anomalies based on 30-day baseline
+    const pastPrecip = daily.precipitation_sum || [];
+    const avgPrecip = pastPrecip.length ? pastPrecip.reduce((a: number, b: number) => a + (b||0), 0) / pastPrecip.length : 0;
+    const currentPrecip = current.precipitation || 0;
     
-    // 1. Rainfall Anomaly Proxy: 
-    // We use current precipitation as a rough proxy. If precipitation is 0, we treat it as a -25% deficit for the hackathon prototype.
-    const precip = current.precipitation || 0;
-    const rainfallAnomaly = precip === 0 ? -25 : Math.min(20, precip * 5); // Rough heuristic
+    // Rainfall Anomaly (% difference from 30-day avg)
+    let rainfallAnomaly = 0;
+    if (avgPrecip === 0 && currentPrecip === 0) rainfallAnomaly = -10; // Arid assumption
+    else if (avgPrecip === 0) rainfallAnomaly = 100;
+    else rainfallAnomaly = ((currentPrecip - avgPrecip) / avgPrecip) * 100;
+    
+    // Cap at sensible values for prototype
+    rainfallAnomaly = Math.max(-100, Math.min(200, rainfallAnomaly));
 
-    // 2. Temperature Anomaly Proxy:
-    // If temp is above 30C, we treat it as a +2C anomaly.
-    const temp = current.temperature_2m || 20;
-    const tempAnomaly = temp > 30 ? 2.5 : (temp < 10 ? -1 : 0.5);
+    // Temperature Anomaly
+    const pastTemp = daily.temperature_2m_max || [];
+    const avgTemp = pastTemp.length ? pastTemp.reduce((a: number, b: number) => a + (b||0), 0) / pastTemp.length : current.temperature_2m;
+    const tempAnomaly = current.temperature_2m - avgTemp;
 
-    // 3. Vegetation Stress Proxy:
-    // Inversely related to soil moisture (0 to 1 scale). If moisture is high, stress is low.
-    const soilMoisture = current.soil_moisture_0_to_7cm || 0.2;
-    // Assume max moisture is ~0.4 m³/m³. Stress = 1 - (moisture / 0.4)
+    // Vegetation/Soil Moisture Stress (0 to 1)
+    const soilMoisture = current.soil_moisture_0_to_7cm !== null ? current.soil_moisture_0_to_7cm : 0.2;
     const vegStress = Math.max(0, Math.min(1, 1 - (soilMoisture / 0.4)));
 
-    // 4. Water Availability Proxy:
-    // Simple heuristic combining rainfall presence and low veg stress.
-    const waterAvail = Math.max(0.1, Math.min(1, (precip > 0 ? 0.4 : 0) + (1 - vegStress) * 0.6));
+    // Water Availability Proxy
+    const waterAvail = Math.max(0.1, Math.min(1, (currentPrecip > 0 ? 0.4 : 0.1) + (1 - vegStress) * 0.5));
 
     const indicators: EnvironmentalIndicators = {
       rainfall_anomaly: {
-        value: rainfallAnomaly,
-        source: "Open-Meteo (Proxy)",
+        value: Math.round(rainfallAnomaly * 10) / 10,
+        source: "Open-Meteo (30-day Baseline)",
         fetchedAt: timestamp,
-        confidence: "LOW",
+        confidence: "MEDIUM",
         isEstimated: true,
         isLive: true
       },
       temperature_anomaly: {
-        value: tempAnomaly,
-        source: "Open-Meteo (Proxy)",
+        value: Math.round(tempAnomaly * 10) / 10,
+        source: "Open-Meteo (30-day Baseline)",
         fetchedAt: timestamp,
-        confidence: "LOW",
+        confidence: "MEDIUM",
         isEstimated: true,
         isLive: true
       },
       vegetation_stress: {
-        value: vegStress,
+        value: Math.round(vegStress * 100) / 100,
         source: "Open-Meteo Soil Moisture",
         fetchedAt: timestamp,
         confidence: "MEDIUM",
@@ -77,23 +86,24 @@ export async function GET(request: Request) {
         isLive: true
       },
       water_availability: {
-        value: waterAvail,
-        source: "Heuristic Derivation",
+        value: Math.round(waterAvail * 100) / 100,
+        source: "AquaSentinel Heuristic",
         fetchedAt: timestamp,
         confidence: "LOW",
         isEstimated: true,
         isLive: false
       },
       population_density: {
-        value: population / 100, // Very rough density proxy from city pop
-        source: "Open-Meteo Geocoding",
+        value: Math.round(population / 100), // Very rough density proxy
+        source: "Geocoding Proxy",
         fetchedAt: timestamp,
-        confidence: "MEDIUM",
+        confidence: "LOW",
         isEstimated: true,
         isLive: false
       }
     };
 
+    await setCachedData('environmental_cache', cacheKey, indicators);
     return NextResponse.json(indicators);
   } catch (error) {
     console.error("Environmental fetch failed:", error);

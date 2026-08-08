@@ -1,14 +1,22 @@
 import { Region, RiskAssessment } from "../types";
 
-/**
- * Transparent Weighted Risk Scoring Model (V3)
- * Consumes ProvenanceMetrics.
- */
 export function calculateRisk(region: Region): RiskAssessment {
   const { indicators } = region;
   
   if (!indicators) {
-    return { score: 0, level: "LOW", equityPriority: 0, equityExplanation: "No environmental data available." };
+    return { 
+      score: 0, 
+      level: "LOW", 
+      equityPriority: 0, 
+      equityExplanation: "No environmental data available.",
+      factors: {
+        precipitationStress: 0,
+        heatStress: 0,
+        vegetationStress: 0,
+        waterAvailabilityStress: 0,
+        populationExposure: 0
+      }
+    };
   }
   
   // 1. Rainfall deficit (0-100 score). Anomaly is e.g. -30 for 30% below average.
@@ -23,25 +31,22 @@ export function calculateRisk(region: Region): RiskAssessment {
   const vegPenalty = indicators.vegetation_stress.value * 100;
   const weightedVeg = vegPenalty * 0.15;
   
-  // 4. Water availability (0-100). Inverted: lower availability = higher penalty.
+  // 4. Water availability proxy stress (0-100). Inverted.
   const availabilityPenalty = (1 - indicators.water_availability.value) * 100;
   const weightedAvailability = availabilityPenalty * 0.30;
 
-  // 5. Population pressure (0-100). Cap at 20,000 density.
+  // 5. Population pressure proxy (0-100). Cap at 20,000 density.
   const popPenalty = Math.min(100, (indicators.population_density.value / 20000) * 100);
   const weightedPop = popPenalty * 0.15;
 
-  // Final score 0-100
   let score = Math.round(weightedRainfall + weightedTemp + weightedVeg + weightedAvailability + weightedPop);
   score = Math.max(0, Math.min(100, score));
 
-  // Determine Level
   let level: "LOW" | "MODERATE" | "HIGH" | "CRITICAL" = "LOW";
-  if (score >= 80) level = "CRITICAL";
-  else if (score >= 60) level = "HIGH";
-  else if (score >= 30) level = "MODERATE";
+  if (score >= 81) level = "CRITICAL";
+  else if (score >= 61) level = "HIGH";
+  else if (score >= 31) level = "MODERATE";
 
-  // Equity Priority Calculation (V3)
   const exposureVulnerability = popPenalty; 
   const equityPriority = Math.round((score * 0.4) + (exposureVulnerability * 0.6));
 
@@ -60,6 +65,13 @@ export function calculateRisk(region: Region): RiskAssessment {
     score,
     level,
     equityPriority,
-    equityExplanation
+    equityExplanation,
+    factors: {
+      precipitationStress: Math.round(weightedRainfall),
+      heatStress: Math.round(weightedTemp),
+      vegetationStress: Math.round(weightedVeg),
+      waterAvailabilityStress: Math.round(weightedAvailability),
+      populationExposure: Math.round(weightedPop)
+    }
   };
 }

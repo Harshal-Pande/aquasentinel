@@ -12,9 +12,12 @@ const makeMockMetric = (val: number): ProvenanceMetric => ({
 export const mockRegions: Region[] = [
   {
     id: "region-nagpur",
-    name: "Nagpur, India",
-    coordinates: [21.1458, 79.0882],
+    name: "Nagpur",
+    country: "India",
+    latitude: 21.1458,
+    longitude: 79.0882,
     population: 3000000,
+    selectionMethod: "search",
     indicators: {
       rainfall_anomaly: makeMockMetric(-31),
       temperature_anomaly: makeMockMetric(2.4),
@@ -25,9 +28,12 @@ export const mockRegions: Region[] = [
   },
   {
     id: "region-bengaluru",
-    name: "Bengaluru, India",
-    coordinates: [12.9716, 77.5946],
+    name: "Bengaluru",
+    country: "India",
+    latitude: 12.9716,
+    longitude: 77.5946,
     population: 8500000,
+    selectionMethod: "search",
     indicators: {
       rainfall_anomaly: makeMockMetric(-15),
       temperature_anomaly: makeMockMetric(1.5),
@@ -39,8 +45,10 @@ export const mockRegions: Region[] = [
   {
     id: "region-fictional",
     name: "New Terra (Demo High-Risk Region)",
-    coordinates: [0, 0],
+    latitude: 0,
+    longitude: 0,
     population: 500000,
+    selectionMethod: "search",
     indicators: {
       rainfall_anomaly: makeMockMetric(-45),
       temperature_anomaly: makeMockMetric(4.2),

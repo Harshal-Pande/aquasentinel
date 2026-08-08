@@ -63,12 +63,14 @@ export function generateDeterministicAnalysis(region: Region): AIRecommendation 
 
   if (!ind) {
     return {
-      situationSummary: "No environmental data available for analysis.",
+      summary: "No environmental data available for analysis.",
       primaryCauses: ["Missing data"],
       affectedPopulation: region.population,
       recommendedInterventions: [ALL_INTERVENTIONS[0]],
-      reasoning: "Fallback analysis due to missing data.",
-      confidence: "LOW"
+      equityExplanation: "Cannot determine equity priority without data.",
+      uncertainties: ["All data missing"],
+      dataCoverage: "LIMITED",
+      isFallback: true
     };
   }
 
@@ -92,13 +94,11 @@ export function generateDeterministicAnalysis(region: Region): AIRecommendation 
     recommendedInterventions.push(ALL_INTERVENTIONS[1]); // Groundwater
   }
 
-  // Ensure we always have at least a couple interventions
   if (recommendedInterventions.length === 0) {
     recommendedInterventions.push(ALL_INTERVENTIONS[0], ALL_INTERVENTIONS[1]);
   }
 
-  // Generate dynamic summary
-  summary = `The region of ${region.name} is currently facing a ${risk.level.toLowerCase()} water risk scenario, with an overall risk score of ${risk.score}/100. `;
+  summary = `The region of ${region.name || "selected coordinates"} is currently facing a ${risk.level.toLowerCase()} water risk scenario, with an overall risk score of ${risk.score}/100. `;
   
   if (risk.level === "CRITICAL" || risk.level === "HIGH") {
     summary += "Immediate intervention is required to secure water access for vulnerable populations.";
@@ -106,16 +106,17 @@ export function generateDeterministicAnalysis(region: Region): AIRecommendation 
     summary += "Preventative measures are recommended to maintain water security.";
   }
 
-  // Deduplicate interventions just in case
   const uniqueInterventions = Array.from(new Set(recommendedInterventions.map(i => i.id)))
     .map(id => recommendedInterventions.find(i => i.id === id)!);
 
   return {
-    situationSummary: summary,
+    summary: summary,
     primaryCauses: primaryCauses.length > 0 ? primaryCauses : ["General baseline water stress"],
-    affectedPopulation: Math.round(ind.population_density.value * 3.5), // Arbitrary scaling for "affected" demo metric
-    recommendedInterventions: uniqueInterventions.slice(0, 3), // Max 3 recommendations
-    reasoning: "Analysis generated via heuristic decision engine based on environmental anomaly data and population pressure.",
-    confidence: "MEDIUM"
+    affectedPopulation: Math.round(ind.population_density.value * 3.5), 
+    recommendedInterventions: uniqueInterventions.slice(0, 3), 
+    equityExplanation: risk.equityExplanation,
+    uncertainties: ["Using heuristic fallback engine", "No live satellite observation verified"],
+    dataCoverage: "MEDIUM",
+    isFallback: true
   };
 }

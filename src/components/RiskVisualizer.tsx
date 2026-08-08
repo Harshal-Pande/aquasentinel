@@ -1,53 +1,37 @@
 "use client";
 
-import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
+import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, Tooltip } from "recharts";
 import { Region } from "@/types";
 
 export default function RiskVisualizer({ region }: { region: Region }) {
   if (!region.indicators) return null;
   const ind = region.indicators;
 
-  // Normalize data for the radar chart (0-100 scale for visual balance)
   const data = [
-    {
-      subject: "Rainfall Deficit",
-      A: Math.min(100, Math.max(0, ind.rainfall_anomaly.value * -2)),
-      fullMark: 100,
-    },
-    {
-      subject: "Temp Heat",
-      A: Math.min(100, ind.temperature_anomaly.value * 20),
-      fullMark: 100,
-    },
-    {
-      subject: "Veg Stress",
-      A: ind.vegetation_stress.value * 100,
-      fullMark: 100,
-    },
-    {
-      subject: "Scarcity",
-      A: (1 - ind.water_availability.value) * 100,
-      fullMark: 100,
-    },
-    {
-      subject: "Population",
-      A: Math.min(100, (ind.population_density.value / 20000) * 100),
-      fullMark: 100,
-    },
+    { subject: "Rainfall", A: Math.min(100, Math.max(0, ind.rainfall_anomaly.value * -2)) },
+    { subject: "Heat", A: Math.min(100, ind.temperature_anomaly.value * 20) },
+    { subject: "Veg Stress", A: ind.vegetation_stress.value * 100 },
+    { subject: "Scarcity", A: (1 - ind.water_availability.value) * 100 },
+    { subject: "Pop Density", A: Math.min(100, (ind.population_density.value / 20000) * 100) },
   ];
 
   return (
-    <div className="h-64 w-full">
+    <div className="w-full h-[200px] -ml-4">
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
           <PolarGrid stroke="#334155" />
-          <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-          <Tooltip 
-            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
-            itemStyle={{ color: '#2dd4bf' }}
+          <PolarAngleAxis dataKey="subject" tick={{ fill: "#64748b", fontSize: 9, fontFamily: "var(--font-space)" }} />
+          <Radar
+            name="Risk Level"
+            dataKey="A"
+            stroke="#0ea5e9"
+            fill="#0ea5e9"
+            fillOpacity={0.3}
           />
-          <Radar name="Risk Factor" dataKey="A" stroke="#2dd4bf" fill="#2dd4bf" fillOpacity={0.4} />
+          <Tooltip 
+            contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#f8fafc", fontSize: "10px", fontFamily: "var(--font-space)" }}
+            itemStyle={{ color: "#0ea5e9" }}
+          />
         </RadarChart>
       </ResponsiveContainer>
     </div>

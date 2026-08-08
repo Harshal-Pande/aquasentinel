@@ -38,42 +38,41 @@ export default function LocationSearch({ onSelect }: Props) {
     return () => clearTimeout(delayDebounceFn);
   }, [query]);
 
-  const handleSelect = (r: SearchResult) => {
-    setQuery("");
-    setShowDropdown(false);
-    onSelect(r);
-  };
-
   return (
-    <div className="relative w-full max-w-md">
-      <div className="relative flex items-center">
-        <Search className="absolute left-3 w-4 h-4 text-slate-400" />
+    <div className="relative w-full z-50">
+      <div className="relative flex items-center bg-[#0a0f18]/90 backdrop-blur-md border border-slate-700 rounded transition-colors focus-within:border-cyan-500 shadow-lg">
+        <Search className="absolute left-3 w-4 h-4 text-slate-500" />
         <input
           type="text"
+          placeholder="SEARCH LOCATION..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search any city or region..."
-          className="w-full bg-slate-900 border border-slate-700 rounded-full py-2 pl-10 pr-10 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500 transition-colors shadow-inner"
+          className="w-full bg-transparent border-none py-3 pl-10 pr-10 text-xs font-bold text-slate-200 placeholder:text-slate-600 focus:outline-none font-space uppercase tracking-widest"
         />
         {isSearching && (
-          <Loader2 className="absolute right-3 w-4 h-4 text-teal-500 animate-spin" />
+          <Loader2 className="absolute right-3 w-4 h-4 text-cyan-500 animate-spin" />
         )}
       </div>
-      
+
       {showDropdown && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-          {results.map((r) => (
+        <div className="absolute top-full mt-2 w-full bg-[#0d1421] border border-slate-700 rounded shadow-2xl overflow-hidden">
+          {results.map((res) => (
             <button
-              key={r.id}
-              onClick={() => handleSelect(r)}
-              className="w-full text-left px-4 py-3 hover:bg-slate-800 transition-colors border-b border-slate-800/50 last:border-0 flex items-start gap-3"
+              key={res.id}
+              onClick={() => {
+                onSelect(res);
+                setShowDropdown(false);
+                setQuery("");
+              }}
+              className="w-full flex flex-col items-start px-4 py-3 hover:bg-slate-800 border-b last:border-0 border-slate-800 transition-colors text-left"
             >
-              <MapPin className="w-4 h-4 text-teal-500 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-slate-200">{r.name}</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {[r.admin1, r.country].filter(Boolean).join(", ")}
-                </p>
+              <div className="flex items-center text-sm font-bold text-slate-200 font-space tracking-wide">
+                <MapPin className="w-3.5 h-3.5 mr-2 text-cyan-500" />
+                {res.name}
+              </div>
+              <div className="text-[10px] text-slate-500 font-space tracking-widest ml-5 mt-1 uppercase">
+                {res.admin1 ? `${res.admin1}, ` : ""}
+                {res.country}
               </div>
             </button>
           ))}
