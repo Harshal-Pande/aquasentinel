@@ -31,7 +31,7 @@ export async function getCachedData<T>(table: string, key: string): Promise<{ da
   }
 }
 
-export async function setCachedData(table: string, key: string, payload: any): Promise<void> {
+export async function setCachedData(table: string, key: string, payload: unknown): Promise<void> {
   try {
     await supabaseServer
       .from(table)

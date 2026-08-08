@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, CircleMarker, useMap, Tooltip, Popup, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, Marker, useMap, Tooltip, Popup, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { Region } from "@/types";
+import L from "leaflet";
+import { Region, LocationTarget } from "@/types";
 
 function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
@@ -30,13 +31,53 @@ function ClickHandler({
   return null;
 }
 
+function MapModeController({ pinMode }: { pinMode: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (pinMode) {
+      map.dragging.disable();
+    } else {
+      map.dragging.enable();
+    }
+  }, [pinMode, map]);
+  return null;
+}
+
+// Custom Leaflet icon for the dropped pin
+const pulseIcon = L.divIcon({
+  className: "custom-pulse-icon",
+  html: `
+    <div style="
+      width: 24px;
+      height: 24px;
+      background-color: #2dd4bf;
+      border: 3px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 15px rgba(45,212,191,0.8);
+      position: relative;
+    ">
+      <div style="
+        position: absolute;
+        top: -3px; left: -3px; right: -3px; bottom: -3px;
+        border-radius: 50%;
+        border: 2px solid #2dd4bf;
+        animation: pulse 1.5s infinite;
+      "></div>
+    </div>
+  `,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+  popupAnchor: [0, -12],
+});
+
 interface MapProps {
   regions: Region[];
   selectedRegion: Region | null;
   onSelectRegion: (region: Region) => void;
   pinMode: boolean;
   onPinDrop: (lat: number, lon: number) => void;
-  draftPin: { lat: number; lon: number } | null;
+  draftLocationTarget?: LocationTarget | null;
+  draftPinCoords?: { lat: number; lon: number } | null;
   onAnalyzeDraft: () => void;
 }
 
@@ -46,7 +87,8 @@ export default function MapComponent({
   onSelectRegion,
   pinMode,
   onPinDrop,
-  draftPin,
+  draftLocationTarget,
+  draftPinCoords,
   onAnalyzeDraft
 }: MapProps) {
   const [center, setCenter] = useState<[number, number]>([20, 0]);
@@ -54,97 +96,120 @@ export default function MapComponent({
 
   useEffect(() => {
     if (selectedRegion) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCenter([selectedRegion.latitude, selectedRegion.longitude]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setZoom(10);
-    } else if (draftPin) {
-      setCenter([draftPin.lat, draftPin.lon]);
+    } else if (draftLocationTarget) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCenter([draftLocationTarget.latitude, draftLocationTarget.longitude]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setZoom(10);
+    } else if (draftPinCoords) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCenter([draftPinCoords.lat, draftPinCoords.lon]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setZoom(10);
     }
-  }, [selectedRegion, draftPin]);
-
-  const getRiskColor = (level?: string) => {
-    switch (level) {
-      case "CRITICAL": return "#ef4444"; // red-500
-      case "HIGH": return "#f97316"; // orange-500
-      case "MODERATE": return "#eab308"; // yellow-500
-      case "LOW": return "#10b981"; // emerald-500
-      default: return "#0ea5e9"; // sky-500 (unanalyzed)
-    }
-  };
+  }, [selectedRegion, draftLocationTarget, draftPinCoords]);
 
   return (
-    <MapContainer 
-      center={center} 
-      zoom={zoom} 
-      className={`w-full h-full bg-slate-900 ${pinMode ? 'cursor-crosshair' : ''}`}
-      zoomControl={false}
-    >
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-      />
+    <div className="w-full h-full relative">
+      <style>{`
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.5); opacity: 0; }
+        }
+        /* Custom Popup styling to match AquaSentinel */
+        .leaflet-popup-content-wrapper {
+          background-color: #0f172a !important;
+          border: 1px solid #334155 !important;
+          border-radius: 0.5rem !important;
+        }
+        .leaflet-popup-tip {
+          background-color: #0f172a !important;
+          border: 1px solid #334155 !important;
+        }
+      `}</style>
       
-      <ChangeView center={center} zoom={zoom} />
-      <ClickHandler pinMode={pinMode} onMapClick={onPinDrop} />
+      <MapContainer 
+        center={center} 
+        zoom={zoom} 
+        className={`w-full h-full bg-slate-900 ${pinMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
+        zoomControl={false}
+      >
+        <MapModeController pinMode={pinMode} />
+        
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        />
+        
+        <ChangeView center={center} zoom={zoom} />
+        <ClickHandler pinMode={pinMode} onMapClick={onPinDrop} />
 
-      {/* Render analyzed regions */}
-      {regions.map((region) => {
-        // Just dummy level logic here since Map doesn't compute risk anymore
-        // Actually, we should pass riskLevel to Map or just rely on a default color
-        // The dashboard knows the risk level, but Map only gets Region.
-        // I will color it based on whether it has indicators
-        const hasData = !!region.indicators;
-        const color = hasData ? (
-          region.indicators!.rainfall_anomaly.value < -20 ? "#ef4444" : "#10b981"
-        ) : "#0ea5e9";
+        {/* Render analyzed regions */}
+        {regions.map((region) => {
+          const hasData = !!region.indicators;
+          const color = hasData ? (
+            region.indicators!.rainfall_anomaly.value < -20 ? "#ef4444" : "#10b981"
+          ) : "#0ea5e9";
 
-        return (
-          <CircleMarker
-            key={region.id}
-            center={[region.latitude, region.longitude]}
-            radius={selectedRegion?.id === region.id ? 12 : 8}
-            fillColor={selectedRegion?.id === region.id ? "#2dd4bf" : color} // teal-400 for selected
-            color={selectedRegion?.id === region.id ? "#fff" : color}
-            weight={selectedRegion?.id === region.id ? 3 : 1}
-            fillOpacity={0.7}
-            eventHandlers={{
-              click: () => onSelectRegion(region),
-            }}
-          >
-            <Tooltip direction="top" offset={[0, -10]} opacity={1} className="bg-slate-900 text-slate-200 border-slate-700">
-              <div className="text-center font-space">
-                <strong>{region.name}</strong><br/>
-                {region.country && <span className="text-xs text-slate-400">{region.country}</span>}
+          return (
+            <CircleMarker
+              key={region.id}
+              center={[region.latitude, region.longitude]}
+              radius={selectedRegion?.id === region.id ? 12 : 8}
+              fillColor={selectedRegion?.id === region.id ? "#2dd4bf" : color} // teal-400 for selected
+              color={selectedRegion?.id === region.id ? "#fff" : color}
+              weight={selectedRegion?.id === region.id ? 3 : 1}
+              fillOpacity={0.7}
+              eventHandlers={{
+                click: () => onSelectRegion(region),
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -10]} opacity={1} className="bg-slate-900 text-slate-200 border-slate-700">
+                <div className="text-center font-space text-[10px] tracking-widest uppercase p-1">
+                  <strong className="text-teal-400">{region.name}</strong><br/>
+                  {region.country && <span className="text-slate-400">{region.country}</span>}
+                </div>
+              </Tooltip>
+            </CircleMarker>
+          );
+        })}
+
+        {/* Render Draft Pin */}
+        {draftPinCoords && !selectedRegion && (
+          <Marker position={[draftPinCoords.lat, draftPinCoords.lon]} icon={pulseIcon}>
+            <Popup closeButton={false} autoPan={true}>
+              <div className="flex flex-col items-center gap-2 p-1 font-space bg-slate-900 text-slate-200 min-w-[150px]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-1 w-full text-center">Location Selected</span>
+                
+                {draftLocationTarget ? (
+                  <>
+                    <strong className="text-sm text-teal-400 leading-tight mt-1 text-center max-w-[200px] break-words">{draftLocationTarget.name}</strong>
+                    <span className="text-[9px] text-slate-400 mt-0">{draftLocationTarget.admin1 || draftLocationTarget.country || 'Coordinates resolved'}</span>
+                    <button 
+                      onClick={onAnalyzeDraft}
+                      className="mt-2 w-full py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 text-[10px] font-bold rounded uppercase tracking-widest transition-colors shadow-[0_0_10px_rgba(45,212,191,0.2)]"
+                    >
+                      Analyze Location
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs font-mono text-teal-400 mt-1">{draftPinCoords.lat.toFixed(4)}° N, {draftPinCoords.lon.toFixed(4)}° E</span>
+                    <div className="flex items-center gap-2 text-slate-500 text-[9px] uppercase tracking-widest mt-2 mb-1">
+                      <div className="w-3 h-3 rounded-full border-2 border-t-teal-500 animate-spin"></div>
+                      Resolving location...
+                    </div>
+                  </>
+                )}
               </div>
-            </Tooltip>
-          </CircleMarker>
-        );
-      })}
-
-      {/* Render Draft Pin */}
-      {draftPin && !selectedRegion && (
-        <CircleMarker
-          center={[draftPin.lat, draftPin.lon]}
-          radius={12}
-          fillColor="#facc15" // yellow-400
-          color="#fff"
-          weight={3}
-          fillOpacity={0.9}
-        >
-          <Popup closeButton={false} autoPan={false}>
-            <div className="flex flex-col items-center gap-2 p-1 font-space bg-slate-900 text-slate-200 min-w-[150px]">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Selected Location</span>
-              <span className="text-sm">{draftPin.lat.toFixed(4)}° N, {draftPin.lon.toFixed(4)}° E</span>
-              <button 
-                onClick={onAnalyzeDraft}
-                className="mt-2 w-full py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold rounded uppercase tracking-wider transition-colors"
-              >
-                Analyze Location
-              </button>
-            </div>
-          </Popup>
-        </CircleMarker>
-      )}
-    </MapContainer>
+            </Popup>
+          </Marker>
+        )}
+      </MapContainer>
+    </div>
   );
 }

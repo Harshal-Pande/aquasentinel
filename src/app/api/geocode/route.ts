@@ -14,7 +14,7 @@ export async function GET(request: Request) {
       const lon = parseFloat(lonStr);
       const cacheKey = `rev:${normalizeCoordinates(lat, lon)}`;
 
-      const { data: cached, stale } = await getCachedData<any>('locations', cacheKey);
+      const { data: cached, stale } = await getCachedData<unknown>('locations', cacheKey);
       if (cached && !stale) {
         return NextResponse.json(cached);
       }
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     
     if (query && query.length >= 2) {
       const cacheKey = `search:${query.toLowerCase()}`;
-      const { data: cached, stale } = await getCachedData<any>('locations', cacheKey);
+      const { data: cached, stale } = await getCachedData<unknown>('locations', cacheKey);
       
       if (cached && !stale) {
         return NextResponse.json({ results: cached });

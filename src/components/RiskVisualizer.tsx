@@ -16,9 +16,9 @@ export default function RiskVisualizer({ region }: { region: Region }) {
   ];
 
   return (
-    <div className="w-full h-[200px] -ml-4">
+    <div className="w-full h-[180px]">
       <ResponsiveContainer width="100%" height="100%">
-        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
+        <RadarChart cx="50%" cy="50%" outerRadius="60%" data={data} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
           <PolarGrid stroke="#334155" />
           <PolarAngleAxis dataKey="subject" tick={{ fill: "#64748b", fontSize: 9, fontFamily: "var(--font-space)" }} />
           <Radar

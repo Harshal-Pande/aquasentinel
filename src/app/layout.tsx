@@ -18,7 +18,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "AquaSentinel - Water Intelligence",
+  title: "Aqua Sentinel - Water Intelligence",
   description: "Water Intelligence for a Resilient Planet",
 };
 

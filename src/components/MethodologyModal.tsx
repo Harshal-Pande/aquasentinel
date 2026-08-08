@@ -22,9 +22,9 @@ export default function MethodologyModal({ isOpen, onClose }: Props) {
           <div className="p-3 border border-teal-500/30 bg-teal-500/10 rounded-lg">
             <p className="text-teal-400 font-bold mb-1">PROTOTYPE DISCLAIMER</p>
             <p className="leading-relaxed">
-              AquaSentinel is an environmental decision-support prototype built for the OurPlanet.Rocks hackathon. 
+              Aqua Sentinel is an environmental decision-support prototype built for the OurPlanet.Rocks hackathon. 
               It is not an officially validated hydrological model. All environmental indicators are derived from public meteorological datasets and reanalysis proxies. 
-              The resulting scores should be interpreted as generalized "Environmental Water Stress Proxies" rather than precise measurements of physical water scarcity.
+              The resulting scores should be interpreted as generalized &quot;Environmental Water Stress Proxies&quot; rather than precise measurements of physical water scarcity.
             </p>
           </div>
 

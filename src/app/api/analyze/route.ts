@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateDeterministicAnalysis } from "@/lib/aiFallback";
 import { getCachedData, setCachedData } from "@/lib/cache/supabaseCache";
+import { AIRecommendation } from "@/types";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -8,7 +9,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 function hashString(str: string) {
   let hash = 0;
   for (let i = 0, len = str.length; i < len; i++) {
-    let chr = str.charCodeAt(i);
+    const chr = str.charCodeAt(i);
     hash = (hash << 5) - hash + chr;
     hash |= 0;
   }
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     const payloadString = JSON.stringify({ r: region.indicators, risk: riskAssessment.score });
     const cacheKey = `ai:${region.id}:${hashString(payloadString)}`;
 
-    const { data: cached, stale } = await getCachedData<any>('analysis_cache', cacheKey);
+    const { data: cached, stale } = await getCachedData<AIRecommendation>('analysis_cache', cacheKey);
     if (cached && !stale) {
       return NextResponse.json(cached);
     }
@@ -101,12 +102,12 @@ export async function POST(request: Request) {
         summary: parsed.summary || "Analysis completed.",
         primaryCauses: parsed.primaryCauses || [],
         affectedPopulation: region.population || 50000,
-        recommendedInterventions: parsed.recommendedInterventions?.map((i: any, idx: number) => ({
+        recommendedInterventions: parsed.recommendedInterventions?.map((i: Record<string, unknown>, idx: number) => ({
           id: `ai-int-${idx}`,
-          name: i.name,
-          description: i.reason,
-          impact: i.expectedImpact || "MEDIUM",
-          feasibility: i.feasibility || "MODERATE",
+          name: i.name as string,
+          description: i.reason as string,
+          impact: (i.expectedImpact as "LOW" | "MEDIUM" | "HIGH") || "MEDIUM",
+          feasibility: (i.feasibility as "EASY" | "MODERATE" | "HARD") || "MODERATE",
           expectedEffects: {
             riskReduction: 15, // Using fixed proxy values for simulator math
             waterRecovery: 300,
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
     }
 
     throw new Error("Failed to parse Gemini response");
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("AI Route error:", error);
     // Since region might not be defined if the error happens during JSON parsing, we need a safe fallback
     return NextResponse.json({ error: "Analysis failed" }, { status: 500 });
