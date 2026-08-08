@@ -32,6 +32,7 @@ export default function Dashboard() {
   const [draftLocationTarget, setDraftLocationTarget] = useState<LocationTarget | null>(null);
   const [draftPinCoords, setDraftPinCoords] = useState<{lat: number; lon: number} | null>(null);
 
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [isLoadingEnv, setIsLoadingEnv] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -151,23 +152,29 @@ export default function Dashboard() {
     setSelectedRegion(null);
     setPinMode(false); 
     
+    setIsGeocoding(true);
+    addLog(`[PIN] Geocoding started for ${lat.toFixed(4)}, ${lon.toFixed(4)}`, "INIT");
+
     try {
       const res = await fetch(`/api/geocode?reverse=true&lat=${lat}&lon=${lon}`);
       if (!res.ok) throw new Error("Reverse geocode failed");
       const data = await res.json();
       
       const target: LocationTarget = {
-        id: data.id,
-        name: data.name,
+        id: data.id || `rev-${lat}-${lon}`,
+        name: data.name || "Unnamed Location",
         admin1: data.admin1,
         country: data.country,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        population: data.population,
+        latitude: lat,
+        longitude: lon,
+        population: data.population || 50000,
         selectionMethod: "map-click"
       };
-      setDraftLocationTarget(target);
+      
+      addLog(`[PIN] Location resolved: ${target.name}`, "SUCCESS");
+      analyzeTarget(target);
     } catch (e) {
+      addLog(`[PIN] Geocoding failed, proceeding with coordinates`, "WARN");
       const fallbackTarget: LocationTarget = {
         id: `rev-${lat}-${lon}`,
         name: "Unnamed Location",
@@ -176,7 +183,9 @@ export default function Dashboard() {
         population: 50000,
         selectionMethod: "map-click"
       };
-      setDraftLocationTarget(fallbackTarget);
+      analyzeTarget(fallbackTarget);
+    } finally {
+      setIsGeocoding(false);
     }
   };
 
@@ -408,10 +417,10 @@ export default function Dashboard() {
 
       {/* 3. RIGHT ZONE: ANALYTICS PANEL */}
       <div className="w-[350px] bg-[#0a0f18] border-l border-slate-800/60 p-4 flex flex-col gap-0 overflow-y-auto custom-scrollbar shrink-0 z-10">
-        {isLoadingEnv || isAnalyzing ? (
+        {isGeocoding || isLoadingEnv || isAnalyzing ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-500 font-space text-[10px] uppercase tracking-widest gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
-            {isLoadingEnv ? 'Fetching Environmental Data...' : 'Processing Intelligence...'}
+            {isGeocoding ? 'Resolving Location...' : isLoadingEnv ? 'Fetching Environmental Data...' : 'Processing Intelligence...'}
           </div>
         ) : !selectedRegion ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-600 font-space text-[9px] uppercase tracking-widest text-center px-6">

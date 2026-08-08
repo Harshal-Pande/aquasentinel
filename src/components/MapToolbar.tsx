@@ -12,7 +12,7 @@ interface Props {
 
 export default function MapToolbar({ pinMode, setPinMode, onSearchSelect }: Props) {
   return (
-    <div className="flex flex-col gap-4 w-[320px] pointer-events-none">
+    <div className="flex flex-col gap-2 w-[220px] pointer-events-none">
       
       {/* Search Bar - Make pointer events auto so it's clickable */}
       <div className="pointer-events-auto">
@@ -20,32 +20,32 @@ export default function MapToolbar({ pinMode, setPinMode, onSearchSelect }: Prop
       </div>
 
       {/* Mode Toggle Toolbar */}
-      <div className="pointer-events-auto flex items-center bg-[#0a0f18]/90 backdrop-blur-md border border-slate-700 rounded-lg shadow-2xl p-1 gap-1">
+      <div className="pointer-events-auto flex items-center bg-[#0a0f18]/90 backdrop-blur-md border border-slate-700/50 rounded shadow-lg p-0.5 gap-0.5">
         <button
           onClick={() => setPinMode(false)}
-          className={`flex-1 flex items-center justify-center py-2.5 px-4 text-xs font-bold font-space uppercase tracking-widest rounded transition-colors ${
+          className={`flex-1 flex items-center justify-center py-1.5 px-2 text-[10px] font-bold font-space uppercase tracking-widest rounded transition-colors ${
             !pinMode
-              ? 'bg-slate-800 text-teal-400 border border-slate-600 shadow-inner'
+              ? 'bg-slate-800 text-cyan-400 border border-slate-600 shadow-inner'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
           }`}
         >
-          <Hand className="w-4 h-4 mr-2" /> HAND
+          <Hand className="w-3 h-3 mr-1.5" /> HAND
         </button>
         <button
           onClick={() => setPinMode(true)}
-          className={`flex-1 flex items-center justify-center py-2.5 px-4 text-xs font-bold font-space uppercase tracking-widest rounded transition-colors ${
+          className={`flex-1 flex items-center justify-center py-1.5 px-2 text-[10px] font-bold font-space uppercase tracking-widest rounded transition-colors ${
             pinMode
-              ? 'bg-teal-500 text-slate-950 border border-teal-400 shadow-[0_0_15px_rgba(45,212,191,0.2)]'
+              ? 'bg-cyan-500 text-slate-950 border border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
           }`}
         >
-          <MapPin className="w-4 h-4 mr-2" /> PIN
+          <MapPin className="w-3 h-3 mr-1.5" /> PIN
         </button>
       </div>
 
       {/* Pin Mode Instructional Banner */}
       {pinMode && (
-        <div className="pointer-events-auto mt-2 bg-teal-500/10 border border-teal-500/30 text-teal-400 text-[10px] font-space tracking-widest uppercase p-3 rounded-lg text-center animate-in fade-in slide-in-from-top-2">
+        <div className="pointer-events-auto mt-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[9px] font-space tracking-widest uppercase p-2 rounded text-center animate-in fade-in slide-in-from-top-2">
           PIN MODE ACTIVE <br/> CLICK ANYWHERE ON MAP TO SELECT
         </div>
       )}

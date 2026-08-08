@@ -50,17 +50,17 @@ const pulseIcon = L.divIcon({
     <div style="
       width: 24px;
       height: 24px;
-      background-color: #2dd4bf;
+      background-color: #22d3ee;
       border: 3px solid white;
       border-radius: 50%;
-      box-shadow: 0 0 15px rgba(45,212,191,0.8);
+      box-shadow: 0 0 15px rgba(34,211,238,0.8);
       position: relative;
     ">
       <div style="
         position: absolute;
         top: -3px; left: -3px; right: -3px; bottom: -3px;
         border-radius: 50%;
-        border: 2px solid #2dd4bf;
+        border: 2px solid #22d3ee;
         animation: pulse 1.5s infinite;
       "></div>
     </div>
@@ -144,12 +144,32 @@ export default function MapComponent({
           url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         />
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png"
+          attribution=""
+          opacity={0.65}
+          pane="overlayPane"
+        />
         
         <ChangeView center={center} zoom={zoom} />
         <ClickHandler pinMode={pinMode} onMapClick={onPinDrop} />
 
         {/* Render analyzed regions */}
         {regions.map((region) => {
+          if (selectedRegion?.id === region.id) {
+            return (
+              <Marker key={region.id} position={[region.latitude, region.longitude]} icon={pulseIcon}>
+                <Popup closeButton={false} autoPan={true}>
+                  <div className="flex flex-col items-center gap-1 p-1 font-space bg-slate-900 text-slate-200 min-w-[120px]">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-1 w-full text-center">Selected</span>
+                    <strong className="text-xs text-cyan-400 mt-1">{region.name}</strong>
+                    {region.country && <span className="text-[9px] text-slate-400">{region.country}</span>}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          }
+
           const hasData = !!region.indicators;
           const color = hasData ? (
             region.indicators!.rainfall_anomaly.value < -20 ? "#ef4444" : "#10b981"
@@ -159,10 +179,10 @@ export default function MapComponent({
             <CircleMarker
               key={region.id}
               center={[region.latitude, region.longitude]}
-              radius={selectedRegion?.id === region.id ? 12 : 8}
-              fillColor={selectedRegion?.id === region.id ? "#2dd4bf" : color} // teal-400 for selected
-              color={selectedRegion?.id === region.id ? "#fff" : color}
-              weight={selectedRegion?.id === region.id ? 3 : 1}
+              radius={8}
+              fillColor={color}
+              color={color}
+              weight={1}
               fillOpacity={0.7}
               eventHandlers={{
                 click: () => onSelectRegion(region),
@@ -170,7 +190,7 @@ export default function MapComponent({
             >
               <Tooltip direction="top" offset={[0, -10]} opacity={1} className="bg-slate-900 text-slate-200 border-slate-700">
                 <div className="text-center font-space text-[10px] tracking-widest uppercase p-1">
-                  <strong className="text-teal-400">{region.name}</strong><br/>
+                  <strong className="text-cyan-400">{region.name}</strong><br/>
                   {region.country && <span className="text-slate-400">{region.country}</span>}
                 </div>
               </Tooltip>
@@ -178,33 +198,18 @@ export default function MapComponent({
           );
         })}
 
-        {/* Render Draft Pin */}
+        {/* Render Draft Pin (when Geocoding/Resolving) */}
         {draftPinCoords && !selectedRegion && (
           <Marker position={[draftPinCoords.lat, draftPinCoords.lon]} icon={pulseIcon}>
             <Popup closeButton={false} autoPan={true}>
               <div className="flex flex-col items-center gap-2 p-1 font-space bg-slate-900 text-slate-200 min-w-[150px]">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-1 w-full text-center">Location Selected</span>
                 
-                {draftLocationTarget ? (
-                  <>
-                    <strong className="text-sm text-teal-400 leading-tight mt-1 text-center max-w-[200px] break-words">{draftLocationTarget.name}</strong>
-                    <span className="text-[9px] text-slate-400 mt-0">{draftLocationTarget.admin1 || draftLocationTarget.country || 'Coordinates resolved'}</span>
-                    <button 
-                      onClick={onAnalyzeDraft}
-                      className="mt-2 w-full py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 text-[10px] font-bold rounded uppercase tracking-widest transition-colors shadow-[0_0_10px_rgba(45,212,191,0.2)]"
-                    >
-                      Analyze Location
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-xs font-mono text-teal-400 mt-1">{draftPinCoords.lat.toFixed(4)}° N, {draftPinCoords.lon.toFixed(4)}° E</span>
-                    <div className="flex items-center gap-2 text-slate-500 text-[9px] uppercase tracking-widest mt-2 mb-1">
-                      <div className="w-3 h-3 rounded-full border-2 border-t-teal-500 animate-spin"></div>
-                      Resolving location...
-                    </div>
-                  </>
-                )}
+                <span className="text-xs font-mono text-cyan-400 mt-1">{draftPinCoords.lat.toFixed(4)}° N, {draftPinCoords.lon.toFixed(4)}° E</span>
+                <div className="flex items-center gap-2 text-slate-500 text-[9px] uppercase tracking-widest mt-2 mb-1">
+                  <div className="w-3 h-3 rounded-full border-2 border-t-cyan-500 animate-spin"></div>
+                  Resolving location...
+                </div>
               </div>
             </Popup>
           </Marker>
