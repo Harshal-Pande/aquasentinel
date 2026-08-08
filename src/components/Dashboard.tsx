@@ -82,9 +82,39 @@ export default function Dashboard() {
     
     try {
       addLog("ENVIRONMENTAL DATA", "PENDING");
-      const envRes = await fetch(`/api/environmental?lat=${target.latitude}&lon=${target.longitude}&pop=${target.population || 50000}`);
+      // 1. Try to fetch from cache first (GET request)
+      let envRes = await fetch(`/api/environmental?lat=${target.latitude}&lon=${target.longitude}&pop=${target.population || 50000}`);
       
       if (currentAnalysisId !== analysisIdRef.current) return;
+      
+      // 2. If not cached, fetch from Open-Meteo client-side and POST to our backend
+      if (envRes.status === 404) {
+        addLog("FETCHING OPEN-METEO (CLIENT)", "INIT");
+        const omUrl = `https://api.open-meteo.com/v1/forecast?latitude=${target.latitude}&longitude=${target.longitude}&current=temperature_2m,precipitation,soil_moisture_0_to_7cm&daily=temperature_2m_max,precipitation_sum&past_days=30&timezone=auto`;
+        const omRes = await fetch(omUrl);
+        
+        if (!omRes.ok) {
+          console.error("Environmental client fetch failed:", {
+            status: omRes.status,
+            statusText: omRes.statusText
+          });
+          throw new Error(`Open-Meteo blocked request (HTTP ${omRes.status}). Please check network/IP.`);
+        }
+        
+        const openMeteoData = await omRes.json();
+        
+        // POST to backend
+        envRes = await fetch('/api/environmental', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: target.latitude,
+            lon: target.longitude,
+            pop: target.population || 50000,
+            openMeteoData
+          })
+        });
+      }
       
       if (!envRes.ok) throw new Error("Environmental data temporarily unavailable.");
       indicators = await envRes.json();
